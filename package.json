@@ -1,0 +1,12 @@
+{
+  "name": "athena-weather-mcp",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "MCP server exposing NWS alerts + Open-Meteo forecasts with an embedded interactive weather explorer widget for Athena.",
+  "scripts": {
+    "dev": "node local.js",
+    "start": "node local.js"
+  },
+  "engines": { "node": ">=20" }
+}
