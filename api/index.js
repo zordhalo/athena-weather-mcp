@@ -7,7 +7,7 @@
  *  GET  /      — landing page
  */
 
-import { handleRpc, PROTOCOL_VERSION, SERVER_INFO } from '../lib/server.js';
+import { handleRpc, PROTOCOL_VERSION, SERVER_INFO, VARIANTS } from '../lib/server.js';
 import { buildExplorerPayload } from '../lib/weather.js';
 import { renderWidget } from '../lib/widget.js';
 
@@ -52,7 +52,7 @@ export default async function handler(req, res) {
   if (path === '/health') return res.status(200).json({ ok: true, ...SERVER_INFO });
 
   /* -------------------------------------------------------- MCP: SSE  */
-  if (req.method === 'GET' && (path === '/mcp' || path === '/sse')) {
+  if (req.method === 'GET' && (path === '/mcp' || path === '/sse' || path.startsWith('/mcp/'))) {
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -66,7 +66,12 @@ export default async function handler(req, res) {
   }
 
   /* -------------------------------------------------------- MCP: POST */
-  if (req.method === 'POST' && (path === '/mcp' || path === '/sse' || path === '/')) {
+  // /mcp -> base, /mcp/mime, /mcp/template, /mcp/nokey, /mcp/all
+  const variantName = path.startsWith('/mcp/') ? path.slice(5) : 'base';
+  const variant = VARIANTS[variantName] ?? VARIANTS.base;
+  const isMcpPath = path === '/mcp' || path === '/sse' || path === '/' || path.startsWith('/mcp/');
+
+  if (req.method === 'POST' && isMcpPath) {
     let body;
     try {
       body = await readBody(req);
@@ -83,7 +88,15 @@ export default async function handler(req, res) {
     const messages = Array.isArray(body) ? body : [body];
     const results = [];
     for (const m of messages) {
-      const r = await handleRpc(m);
+      // Logged so the Vercel runtime log shows whether a host ever follows up
+      // with resources/read after a tools/call — the decisive diagnostic.
+      console.log(
+        `[mcp:${variantName}] ${m?.method}` +
+        (m?.params?.uri ? ` uri=${m.params.uri}` : '') +
+        (m?.params?.name ? ` tool=${m.params.name}` : '') +
+        ` ua=${req.headers['user-agent'] ?? '?'}`
+      );
+      const r = await handleRpc(m, variant);
       if (r) results.push(r);
     }
     if (!results.length) return res.status(202).end();
