@@ -1,15 +1,18 @@
 /**
  * HTTP surface.
  *
- *  POST /mcp   — Streamable HTTP MCP endpoint (JSON-RPC)
- *  GET  /mcp   — SSE stream (kept open; some hosts probe this before POSTing)
- *  GET  /widget?location=Miami — the widget standalone, for browser preview/demo
- *  GET  /      — landing page
+ *  POST /mcp              — Streamable HTTP MCP endpoint (JSON-RPC)
+ *  POST /mcp/:variant     — same, with a render-path variant (see lib/server.js)
+ *  GET  /mcp              — SSE stream (some hosts probe this before POSTing)
+ *  GET  /widget?location= — data-inlined widget, standalone preview/demo
+ *  GET  /widget/template  — the self-hydrating template a host fetches
+ *  GET  /widget/harness   — dev harness proving the hydration path
+ *  GET  /                 — landing page
  */
 
 import { handleRpc, PROTOCOL_VERSION, SERVER_INFO, VARIANTS } from '../lib/server.js';
 import { buildExplorerPayload } from '../lib/weather.js';
-import { renderWidget } from '../lib/widget.js';
+import { renderWidget, renderWidgetTemplate } from '../lib/widget.js';
 
 function cors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
@@ -49,10 +52,49 @@ export default async function handler(req, res) {
     }
   }
 
+  // Raw self-hydrating template (no data) — what a template-fetching host gets.
+  if (path === '/widget/template') {
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    return res.status(200).send(renderWidgetTemplate());
+  }
+
+  // Dev harness: iframes the template and pushes a real payload in over
+  // postMessage, the way a host does. Proves the hydration path without having
+  // to click through a chat client.
+  if (path === '/widget/harness') {
+    const location = url.searchParams.get('location') || 'Tucson, Arizona';
+    try {
+      const payload = await buildExplorerPayload(location, 7);
+      const json = JSON.stringify(payload).replace(/</g, '\\u003c');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(200).send(`<!doctype html><meta charset="utf-8">
+<title>Hydration harness</title>
+<body style="margin:0;font:13px system-ui">
+<div id="log" style="padding:8px 12px;background:#111;color:#0f0">harness: waiting for iframe…</div>
+<iframe id="f" src="/widget/template" style="width:100%;height:1400px;border:0"></iframe>
+<script>
+  var payload = ${json};
+  var f = document.getElementById('f');
+  f.addEventListener('load', function () {
+    // Mirrors the shape a host delivers via ontoolresult.
+    f.contentWindow.postMessage(
+      { structuredContent: payload, content: [{ type: 'text', text: 'summary' }] }, '*'
+    );
+    document.getElementById('log').textContent = 'harness: payload posted into template iframe';
+  });
+</script>`);
+    } catch (err) {
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      return res.status(400).send(`<p style="font:14px system-ui">${err.message}</p>`);
+    }
+  }
+
   if (path === '/health') return res.status(200).json({ ok: true, ...SERVER_INFO });
 
   /* -------------------------------------------------------- MCP: SSE  */
   if (req.method === 'GET' && (path === '/mcp' || path === '/sse' || path.startsWith('/mcp/'))) {
+    // Capped deliberately: an unbounded keep-alive burns a full function
+    // duration until the platform timeout on every probe.
     res.writeHead(200, {
       'Content-Type': 'text/event-stream',
       'Cache-Control': 'no-cache, no-transform',
@@ -60,7 +102,11 @@ export default async function handler(req, res) {
       'Access-Control-Allow-Origin': '*',
     });
     res.write(': connected\n\n');
-    const ka = setInterval(() => res.write(': keep-alive\n\n'), 15000);
+    let ticks = 0;
+    const ka = setInterval(() => {
+      res.write(': keep-alive\n\n');
+      if (++ticks >= 3) { clearInterval(ka); res.end(); }
+    }, 5000);
     req.on('close', () => clearInterval(ka));
     return;
   }
@@ -88,8 +134,8 @@ export default async function handler(req, res) {
     const messages = Array.isArray(body) ? body : [body];
     const results = [];
     for (const m of messages) {
-      // Logged so the Vercel runtime log shows whether a host ever follows up
-      // with resources/read after a tools/call — the decisive diagnostic.
+      // Logged so the runtime log shows whether a host follows up with
+      // resources/read after a tools/call, and which URI it asks for.
       console.log(
         `[mcp:${variantName}] ${m?.method}` +
         (m?.params?.uri ? ` uri=${m.params.uri}` : '') +
@@ -127,9 +173,9 @@ export default async function handler(req, res) {
 <title>Athena Weather MCP</title>
 <style>body{font:15px/1.6 ui-sans-serif,system-ui;max-width:640px;margin:60px auto;padding:0 20px;color:#111}
 code{background:#f2f4f7;padding:2px 6px;border-radius:5px}a{color:#2563eb}</style>
-<h1>🌩️ Weather Alert &amp; Forecast Explorer — MCP</h1>
+<h1>Weather Alert &amp; Forecast Explorer — MCP</h1>
 <p>Streamable-HTTP MCP server exposing live weather data with an embedded interactive widget.</p>
-<p><b>MCP endpoint:</b> <code>${'${origin}/mcp'.replace('${origin}', '')}/mcp</code></p>
+<p><b>MCP endpoint:</b> <code>/mcp</code></p>
 <ul>
   <li><code>explore_weather</code> — interactive explorer for any location</li>
   <li><code>list_active_alerts</code> — live US NWS severe weather alerts</li>
