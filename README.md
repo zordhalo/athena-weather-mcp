@@ -10,9 +10,11 @@ Built for the Athena AI Interview Challenge — subject: *Weather alert and fore
 
 | | URL |
 |---|---|
-| **MCP endpoint** | `https://<deployment>/mcp` |
-| Widget preview (browser) | `https://<deployment>/widget?location=Miami,Florida` |
-| Health | `https://<deployment>/health` |
+| **MCP endpoint** | `https://athena-weather-mcp-mocha.vercel.app/mcp` |
+| Widget preview (browser) | [`/widget?location=Burlington,Vermont`](https://athena-weather-mcp-mocha.vercel.app/widget?location=Burlington,Vermont) |
+| Health | [`/health`](https://athena-weather-mcp-mocha.vercel.app/health) |
+
+No authentication — the endpoint is public so any MCP host can connect directly.
 
 ---
 
