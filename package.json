@@ -8,5 +8,10 @@
     "dev": "node local.js",
     "start": "node local.js"
   },
-  "engines": { "node": ">=20" }
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/ext-apps": "^1.7.5"
+  }
 }
