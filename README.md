@@ -1,5 +1,7 @@
 # 🌩️ Weather Alert & Forecast Explorer — Athena MCP Agent
 
+[![MCP servers live](https://whobuildsagents.com/badge/advancelabs.dev.svg)](https://whobuildsagents.com/advancelabs.dev)
+
 An MCP server that exposes **live open weather data** and renders it as an **embedded interactive widget** inside Athena.
 
 Built for the Athena AI Interview Challenge — subject: *Weather alert and forecast explorer*.
